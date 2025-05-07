@@ -16,10 +16,10 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 script {
-                    // Gunakan Docker untuk instalasi dependencies
-                    bat 'docker run --rm -v %CD%:/app -w /app composer:latest composer install --no-interaction --prefer-dist --optimize-autoloader'
-                    bat 'docker run --rm -v %CD%:/app -w /app node:16 npm install'
-                    bat 'docker run --rm -v %CD%:/app -w /app node:16 npm run prod'
+                    // Gunakan sh untuk Linux/Unix
+                    sh 'docker run --rm -v $(pwd):/app -w /app composer:latest composer install --no-interaction --prefer-dist --optimize-autoloader'
+                    sh 'docker run --rm -v $(pwd):/app -w /app node:16 npm install'
+                    sh 'docker run --rm -v $(pwd):/app -w /app node:16 npm run prod'
                 }
             }
         }
@@ -27,7 +27,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    bat 'docker build -t %DOCKER_IMAGE%:%DOCKER_TAG% .'
+                    sh 'docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .'
                 }
             }
         }
@@ -35,8 +35,8 @@ pipeline {
         stage('Run Laravel') {
             steps {
                 script {
-                    bat 'docker-compose down || true'
-                    bat 'docker-compose up -d --build'
+                    sh 'docker-compose down || true'
+                    sh 'docker-compose up -d --build'
                 }
             }
         }
