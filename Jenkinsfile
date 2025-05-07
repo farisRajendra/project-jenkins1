@@ -2,43 +2,30 @@ pipeline {
     agent any
     
     environment {
-        // Sesuaikan dengan nama image Docker Anda
         DOCKER_IMAGE = "laravel-app"
         DOCKER_TAG = "latest"
     }
     
     stages {
-        // Stage 1: Clone repository
         stage('Checkout Code') {
             steps {
                 git branch: 'main', url: 'https://github.com/farisRajendra/project-jenkins1.git'
             }
         }
         
-        // Stage 2: Install dependencies Laravel
-        stage('Install Dependencies') {
+        stage('Install Dependencies & Build') {
             steps {
                 script {
-                    try {
-                        // Cek versi Composer terlebih dahulu
-                        bat 'composer --version'
-                        
-                        // Install dependencies dengan output yang lebih detail
-                        bat 'composer install --no-interaction --prefer-dist --optimize-autoloader --verbose'
-                        
-                        // Cek apakah NPM tersedia
-                        bat 'npm --version'
-                        bat 'npm install'
-                        bat 'npm run prod'
-                    } catch (Exception e) {
-                        echo "Error pada tahap Install Dependencies: ${e.message}"
-                        throw e
-                    }
+                    // Gunakan Docker untuk instalasi dependencies
+                    bat '''
+                        docker run --rm -v %CD%:/app -w /app composer:latest composer install --no-interaction --prefer-dist --optimize-autoloader
+                        docker run --rm -v %CD%:/app -w /app node:latest npm install
+                        docker run --rm -v %CD%:/app -w /app node:latest npm run prod
+                    '''
                 }
             }
         }
         
-        // Stage 3: Build Docker image
         stage('Build Docker Image') {
             steps {
                 script {
@@ -47,14 +34,10 @@ pipeline {
             }
         }
         
-        // Stage 4: Jalankan Laravel di Docker
         stage('Run Laravel') {
             steps {
                 script {
-                    // Hentikan container lama jika ada
                     bat 'docker-compose down || true'
-                    
-                    // Jalankan container baru
                     bat 'docker-compose up -d --build'
                 }
             }
