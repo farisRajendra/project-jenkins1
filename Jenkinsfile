@@ -1,51 +1,61 @@
 pipeline {
     agent any
-
+    
     environment {
-        DOCKER_IMAGE = 'laravel-app'
+        // Sesuaikan dengan nama image Docker Anda
+        DOCKER_IMAGE = "laravel-app"
+        DOCKER_TAG = "latest"
     }
-
+    
     stages {
-        stage('Check Docker Access') {
+        // Stage 1: Clone repository
+        stage('Checkout Code') {
             steps {
-                bat '''
-                    echo "Checking Docker..."
-                    docker --version || echo "Docker not found!"
-                    where docker || echo "Docker not in PATH"
-                '''
+                git branch: 'main', url: 'https://github.com/username/repo-laravel.git'
             }
         }
-
-        stage('Clone Repo') {
+        
+        // Stage 2: Install dependencies Laravel
+        stage('Install Dependencies') {
             steps {
-                git branch: 'main', url: 'https://github.com/farisRajendra/project-jenkins1.git'
+                script {
+                    bat 'composer install --no-interaction --prefer-dist --optimize-autoloader'
+                    bat 'npm install'
+                    bat 'npm run prod'
+                }
             }
         }
-
+        
+        // Stage 3: Build Docker image
         stage('Build Docker Image') {
             steps {
-                bat '''
-                    echo "Building Docker image..."
-                    docker build -t %DOCKER_IMAGE% . || echo "Build failed!"
-                '''
+                script {
+                    bat 'docker build -t %DOCKER_IMAGE%:%DOCKER_TAG% .'
+                }
             }
         }
-
-        stage('Run Docker Container') {
+        
+        // Stage 4: Jalankan Laravel di Docker
+        stage('Run Laravel') {
             steps {
-                bat '''
-                    echo "Running container..."
-                    docker stop laravel-container || exit 0
-                    docker rm laravel-container || exit 0
-                    docker run -d -p 8000:8000 --name laravel-container %DOCKER_IMAGE% || echo "Run failed!"
-                '''
+                script {
+                    // Hentikan container lama jika ada
+                    bat 'docker-compose down || true'
+                    
+                    // Jalankan container baru
+                    bat 'docker-compose up -d --build'
+                }
             }
         }
     }
-
+    
     post {
-        always {
-            bat 'echo "Pipeline completed with status: %ERRORLEVEL%"'
+        success {
+            echo '✅ Laravel berhasil di-deploy!'
+            echo '🌐 Buka http://localhost:8000 untuk mengakses aplikasi.'
+        }
+        failure {
+            echo '❌ Deployment gagal. Periksa log untuk detail error.'
         }
     }
 }

@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:80"  # Port host:Port container
+    volumes:
+      - .:/var/www/html  # Mount folder lokal ke container
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true

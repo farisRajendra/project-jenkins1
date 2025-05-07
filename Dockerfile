@@ -1,32 +1,40 @@
-# Gunakan base image PHP dengan Apache
+# Gunakan image PHP + Apache untuk Windows
 FROM php:8.2-apache
 
-# Install ekstensi PHP yang dibutuhkan Laravel
-RUN apt-get update && apt-get install -y \
-    libzip-dev zip unzip git curl \
-    && docker-php-ext-install pdo pdo_mysql zip
-
-# Aktifkan mod_rewrite untuk Laravel (dibutuhkan untuk routing)
-RUN a2enmod rewrite
-
-# Salin file Laravel ke direktori kerja container
-COPY . /var/www/html
-
-# Atur working directory
+# Set working directory
 WORKDIR /var/www/html
 
-# Atur permission storage & bootstrap
-RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 775 storage bootstrap/cache
+# Install dependencies untuk Laravel
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    libpng-dev \
+    libonig-dev \
+    libxml2-dev \
+    zip \
+    unzip
 
-# Salin file .env contoh (opsional, jika tidak sudah di dalam repo)
-# COPY .env.example .env
+# Install ekstensi PHP yang diperlukan
+RUN docker-php-ext-install pdo pdo_mysql mbstring exif pcntl bcmath gd
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Jalankan composer install
-RUN composer install --no-dev --optimize-autoloader
+# Copy semua file Laravel ke container
+COPY . .
 
-# Expose port Apache (default 80)
+# Install dependencies Laravel
+RUN composer install --no-interaction --prefer-dist --optimize-autoloader
+
+# Generate Laravel key (jika .env belum ada)
+RUN if [ ! -f ".env" ]; then cp .env.example .env && php artisan key:generate; fi
+
+# Set permission storage
+RUN chown -R www-data:www-data /var/www/html/storage
+RUN chmod -R 775 /var/www/html/storage
+
+# Expose port 80
 EXPOSE 80
+
+# Jalankan Apache
+CMD ["apache2-foreground"]
