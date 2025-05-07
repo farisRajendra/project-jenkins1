@@ -1,5 +1,8 @@
 pipeline {
-    agent any
+    // Gunakan agent dengan label docker-windows
+    agent {
+        label 'docker-windows'
+    }
     
     environment {
         DOCKER_IMAGE = "laravel-app"
@@ -9,17 +12,19 @@ pipeline {
     stages {
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/farisRajendra/project-jenkins1.git'
+                checkout scm
             }
         }
         
         stage('Install Dependencies') {
             steps {
                 script {
-                    // Gunakan sh untuk Linux/Unix
-                    sh 'docker run --rm -v $(pwd):/app -w /app composer:latest composer install --no-interaction --prefer-dist --optimize-autoloader'
-                    sh 'docker run --rm -v $(pwd):/app -w /app node:16 npm install'
-                    sh 'docker run --rm -v $(pwd):/app -w /app node:16 npm run prod'
+                    // Gunakan PowerShell untuk menjalankan perintah Docker
+                    powershell '''
+                        docker run --rm -v ${PWD}:/app -w /app composer:latest composer install --no-interaction --prefer-dist --optimize-autoloader
+                        docker run --rm -v ${PWD}:/app -w /app node:16 npm install
+                        docker run --rm -v ${PWD}:/app -w /app node:16 npm run prod
+                    '''
                 }
             }
         }
@@ -27,7 +32,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    sh 'docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .'
+                    powershell 'docker build -t ${env:DOCKER_IMAGE}:${env:DOCKER_TAG} .'
                 }
             }
         }
@@ -35,8 +40,10 @@ pipeline {
         stage('Run Laravel') {
             steps {
                 script {
-                    sh 'docker-compose down || true'
-                    sh 'docker-compose up -d --build'
+                    powershell '''
+                        docker-compose down
+                        docker-compose up -d --build
+                    '''
                 }
             }
         }
