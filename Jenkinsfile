@@ -19,9 +19,21 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 script {
-                    bat 'composer install --no-interaction --prefer-dist --optimize-autoloader'
-                    bat 'npm install'
-                    bat 'npm run prod'
+                    try {
+                        // Cek versi Composer terlebih dahulu
+                        bat 'composer --version'
+                        
+                        // Install dependencies dengan output yang lebih detail
+                        bat 'composer install --no-interaction --prefer-dist --optimize-autoloader --verbose'
+                        
+                        // Cek apakah NPM tersedia
+                        bat 'npm --version'
+                        bat 'npm install'
+                        bat 'npm run prod'
+                    } catch (Exception e) {
+                        echo "Error pada tahap Install Dependencies: ${e.message}"
+                        throw e
+                    }
                 }
             }
         }
