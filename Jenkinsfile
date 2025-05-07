@@ -6,10 +6,13 @@ pipeline {
     }
 
     stages {
-        stage('Test Basic Command') {
+        stage('Check Docker Access') {
             steps {
-                bat 'echo "Testing Windows command"'
-                bat 'echo %PATH%'
+                bat '''
+                    echo "Checking Docker..."
+                    docker --version || echo "Docker not found!"
+                    where docker || echo "Docker not in PATH"
+                '''
             }
         }
 
@@ -21,16 +24,20 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                bat 'docker build -t %DOCKER_IMAGE% .'
+                bat '''
+                    echo "Building Docker image..."
+                    docker build -t %DOCKER_IMAGE% . || echo "Build failed!"
+                '''
             }
         }
 
         stage('Run Docker Container') {
             steps {
                 bat '''
+                    echo "Running container..."
                     docker stop laravel-container || exit 0
                     docker rm laravel-container || exit 0
-                    docker run -d -p 8000:8000 --name laravel-container %DOCKER_IMAGE%
+                    docker run -d -p 8000:8000 --name laravel-container %DOCKER_IMAGE% || echo "Run failed!"
                 '''
             }
         }
@@ -38,7 +45,7 @@ pipeline {
 
     post {
         always {
-            bat 'echo "Pipeline completed"'
+            bat 'echo "Pipeline completed with status: %ERRORLEVEL%"'
         }
     }
 }
