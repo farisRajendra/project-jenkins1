@@ -15,7 +15,7 @@ pipeline {
 
         stage('Clone Repo') {
             steps {
-                sh 'git clone -b main https://github.com/farisRajendra/project-jenkins1.git .'
+                git branch: 'main', url: 'https://github.com/farisRajendra/project-jenkins1.git'
             }
         }
 
