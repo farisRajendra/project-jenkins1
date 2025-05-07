@@ -6,39 +6,41 @@ pipeline {
     }
     
     stages {
+        stage('Diagnostics') {
+            steps {
+                // Periksa environment
+                bat 'echo %PATH%'
+                bat 'where docker || echo Docker tidak ditemukan di PATH'
+                bat 'systeminfo | findstr /B /C:"OS Name" /C:"OS Version"'
+                
+                // Periksa status Docker
+                bat '"C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker" --version || echo Docker tidak dapat diakses'
+                bat '"C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker" info || echo Docker daemon tidak berjalan'
+            }
+        }
+        
         stage('Clone Repo') {
             steps {
                 git branch: 'main', url: 'https://github.com/farisRajendra/project-jenkins1.git'
             }
         }
         
+        stage('Check Dockerfile') {
+            steps {
+                // Verifikasi Dockerfile ada
+                bat 'dir'
+                bat 'type Dockerfile || echo Dockerfile tidak ditemukan'
+            }
+        }
+        
         stage('Build Docker Image') {
             steps {
-                // Menggunakan bat untuk Windows, bukan sh
-                bat 'docker build -t %DOCKER_IMAGE% .'
+                // Coba build dengan berbagai sintaks
+                bat '''
+                echo === Mencoba Build Docker ===
+                "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker" build -t %DOCKER_IMAGE% . || echo Build gagal dengan sintaks 1
+                '''
             }
-        }
-        
-        stage('Remove Existing Container') {
-            steps {
-                // Menghapus container yang sudah ada jika ada (ignore error jika tidak ada)
-                bat 'docker stop laravel-container || true'
-                bat 'docker rm laravel-container || true'
-            }
-        }
-        
-        stage('Run Docker Container') {
-            steps {
-                // Menggunakan bat untuk Windows, bukan sh
-                bat 'docker run -d -p 8000:8000 --name laravel-container %DOCKER_IMAGE%'
-            }
-        }
-    }
-    
-    post {
-        failure {
-            // Menampilkan logs Docker jika terjadi kegagalan
-            bat 'docker logs laravel-container || true'
         }
     }
 }
