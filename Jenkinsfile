@@ -8,8 +8,8 @@ pipeline {
     stages {
         stage('Test Basic Command') {
             steps {
-                sh 'echo "Testing Shell command"'
-                sh 'echo $PATH'
+                bat 'echo "Testing Windows command"'
+                bat 'echo %PATH%'
             }
         }
 
@@ -21,16 +21,16 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t $DOCKER_IMAGE .'
+                bat 'docker build -t %DOCKER_IMAGE% .'
             }
         }
 
         stage('Run Docker Container') {
             steps {
-                sh '''
-                    docker stop laravel-container || true
-                    docker rm laravel-container || true
-                    docker run -d -p 8000:8000 --name laravel-container $DOCKER_IMAGE
+                bat '''
+                    docker stop laravel-container || exit 0
+                    docker rm laravel-container || exit 0
+                    docker run -d -p 8000:8000 --name laravel-container %DOCKER_IMAGE%
                 '''
             }
         }
@@ -38,7 +38,7 @@ pipeline {
 
     post {
         always {
-            sh 'echo "Pipeline completed"'
+            bat 'echo "Pipeline completed"'
         }
     }
 }
