@@ -6,41 +6,43 @@ pipeline {
     }
     
     stages {
-        stage('Diagnostics') {
+        stage('Test Basic Command') {
             steps {
-                // Periksa environment
-                bat 'echo %PATH%'
-                bat 'where docker || echo Docker tidak ditemukan di PATH'
-                bat 'systeminfo | findstr /B /C:"OS Name" /C:"OS Version"'
-                
-                // Periksa status Docker
-                bat '"C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker" --version || echo Docker tidak dapat diakses'
-                bat '"C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker" info || echo Docker daemon tidak berjalan'
+                // Tes perintah Windows dasar
+                powershell 'Write-Host "Testing PowerShell command"'
+                powershell 'Write-Host $env:PATH'
             }
         }
         
         stage('Clone Repo') {
             steps {
-                git branch: 'main', url: 'https://github.com/farisRajendra/project-jenkins1.git'
-            }
-        }
-        
-        stage('Check Dockerfile') {
-            steps {
-                // Verifikasi Dockerfile ada
-                bat 'dir'
-                bat 'type Dockerfile || echo Dockerfile tidak ditemukan'
+                // Clone menggunakan sintaks powershell
+                powershell 'git clone -b main https://github.com/farisRajendra/project-jenkins1.git .'
             }
         }
         
         stage('Build Docker Image') {
             steps {
-                // Coba build dengan berbagai sintaks
-                bat '''
-                echo === Mencoba Build Docker ===
-                "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker" build -t %DOCKER_IMAGE% . || echo Build gagal dengan sintaks 1
-                '''
+                // Gunakan powershell untuk memanggil Docker
+                powershell 'docker build -t $env:DOCKER_IMAGE .'
             }
+        }
+        
+        stage('Run Docker Container') {
+            steps {
+                // Hentikan dan hapus container yang mungkin sudah ada
+                powershell 'docker stop laravel-container 2>$null; docker rm laravel-container 2>$null'
+                
+                // Jalankan container baru
+                powershell 'docker run -d -p 8000:8000 --name laravel-container $env:DOCKER_IMAGE'
+            }
+        }
+    }
+    
+    post {
+        always {
+            // Informasi status
+            powershell 'Write-Host "Pipeline completed"'
         }
     }
 }
