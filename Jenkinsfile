@@ -11,7 +11,7 @@ pipeline {
         // Stage 1: Clone repository
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/username/repo-laravel.git'
+                git branch: 'main', url: 'https://github.com/farisRajendra/project-jenkins1.git'
             }
         }
         
