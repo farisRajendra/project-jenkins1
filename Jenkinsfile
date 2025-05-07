@@ -13,15 +13,13 @@ pipeline {
             }
         }
         
-        stage('Install Dependencies & Build') {
+        stage('Install Dependencies') {
             steps {
                 script {
                     // Gunakan Docker untuk instalasi dependencies
-                    bat '''
-                        docker run --rm -v %CD%:/app -w /app composer:latest composer install --no-interaction --prefer-dist --optimize-autoloader
-                        docker run --rm -v %CD%:/app -w /app node:latest npm install
-                        docker run --rm -v %CD%:/app -w /app node:latest npm run prod
-                    '''
+                    bat 'docker run --rm -v %CD%:/app -w /app composer:latest composer install --no-interaction --prefer-dist --optimize-autoloader'
+                    bat 'docker run --rm -v %CD%:/app -w /app node:16 npm install'
+                    bat 'docker run --rm -v %CD%:/app -w /app node:16 npm run prod'
                 }
             }
         }
