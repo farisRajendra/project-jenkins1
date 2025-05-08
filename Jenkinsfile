@@ -1,89 +1,110 @@
 pipeline {
     agent any
-
+    
     environment {
-        DOCKER_IMAGE = "laravel-app"
-        DOCKER_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT.take(7)}"
+        // Variabel lingkungan
+        APP_NAME = "laravel_app"
+        DOCKER_COMPOSE_VERSION = "1.29.2"
     }
-
+    
     stages {
-        stage('Checkout & Setup') {
+        stage('Checkout Kode') {
             steps {
+                // Checkout kode dari repositori Git
                 checkout scm
-                script {
-                    if (isUnix()) {
-                        sh '''
-                            if [ ! -f .env ]; then
-                                cp .env.example .env || echo "No .env.example found"
-                                echo "APP_ENV=production" >> .env
-                            fi
-                        '''
-                    } else {
-                        bat '''
-                            if not exist .env (
-                                copy .env.example .env || echo No .env.example found
-                                echo APP_ENV=production >> .env
-                            )
-                        '''
-                    }
-                }
             }
         }
-
-        stage('Install Dependencies') {
+        
+        stage('Persiapan Lingkungan') {
             steps {
+                // Buat file .env dari .env.example
                 script {
-                    if (isUnix()) {
+                    if (fileExists('.env.example')) {
+                        sh 'cp .env.example .env'
+                        // Update nilai-nilai variabel lingkungan sesuai kebutuhan
                         sh '''
-                            docker run --rm -v ${PWD}:/app -w /app composer install --no-interaction
-                            docker run --rm -v ${PWD}:/app -w /app node:16 npm install
-                            docker run --rm -v ${PWD}:/app -w /app node:16 npm run prod || docker run --rm -v ${PWD}:/app -w /app node:16 npm run build
+                            sed -i 's/DB_HOST=127.0.0.1/DB_HOST=db/g' .env
+                            sed -i 's/DB_DATABASE=laravel/DB_DATABASE=laravel_app/g' .env
+                            sed -i 's/DB_USERNAME=root/DB_USERNAME=laravel_user/g' .env
+                            sed -i 's/DB_PASSWORD=/DB_PASSWORD=laravel_password/g' .env
                         '''
                     } else {
-                        bat '''
-                            docker run --rm -v "%cd%":/app -w /app composer install --no-interaction
-                            docker run --rm -v "%cd%":/app -w /app node:16 npm install
-                            docker run --rm -v "%cd%":/app -w /app node:16 npm run prod || docker run --rm -v "%cd%":/app -w /app node:16 npm run build
-                        '''
+                        error "File .env.example tidak ditemukan!"
                     }
                 }
+                
+                // Generate application key
+                sh 'docker run --rm -v ${PWD}:/var/www php:8.2-cli php /var/www/artisan key:generate'
             }
         }
-
-        stage('Build & Deploy') {
+        
+        stage('Build dan Up Docker') {
             steps {
-                script {
-                    if (isUnix()) {
-                        sh """
-                            docker build -t ${env.DOCKER_IMAGE}:${env.DOCKER_TAG} .
-                            docker-compose down || true
-                            docker-compose up -d --build
-                            sleep 10
-                        """
-                    } else {
-                        bat """
-                            docker build -t %DOCKER_IMAGE%:%DOCKER_TAG% .
-                            docker-compose down || echo "No containers to stop"
-                            docker-compose up -d --build
-                            timeout /t 10 /nobreak > NUL
-                        """
-                    }
-                }
+                // Pastikan Docker berjalan
+                sh 'docker --version'
+                
+                // Build dan jalankan kontainer
+                sh 'docker-compose build'
+                sh 'docker-compose up -d'
+            }
+        }
+        
+        stage('Migrasi Database') {
+            steps {
+                // Jalankan migrasi database di dalam kontainer
+                sh 'docker-compose exec -T app php artisan migrate --force'
+            }
+        }
+        
+        stage('Install Dependencies dan Build Assets') {
+            steps {
+                // Install PHP dependencies
+                sh 'docker-compose exec -T app composer install --no-interaction --no-dev --optimize-autoloader'
+                
+                // Install Node.js dependencies dan build assets
+                sh 'docker-compose exec -T app npm install'
+                sh 'docker-compose exec -T app npm run build'
+            }
+        }
+        
+        stage('Cache Config dan Routes') {
+            steps {
+                // Optimasi Laravel
+                sh 'docker-compose exec -T app php artisan config:cache'
+                sh 'docker-compose exec -T app php artisan route:cache'
+                sh 'docker-compose exec -T app php artisan view:cache'
+            }
+        }
+        
+        stage('Tests') {
+            steps {
+                // Jalankan pengujian Laravel
+                sh 'docker-compose exec -T app php artisan test'
+            }
+        }
+        
+        stage('Deploy') {
+            steps {
+                echo 'Aplikasi Laravel berhasil di-deploy dan berjalan pada http://localhost'
+                
+                // Opsional: tambahkan langkah-langkah deployment ke server produksi
+                // Misalnya menggunakan rsync, scp, atau metode lainnya
             }
         }
     }
-
+    
     post {
+        success {
+            echo 'Pipeline berhasil dijalankan!'
+        }
+        failure {
+            // Jika pipeline gagal, matikan kontainer Docker
+            sh 'docker-compose down'
+            echo 'Pipeline gagal! Kontainer Docker telah dimatikan.'
+        }
         always {
-            script {
-                if (isUnix()) {
-                    sh 'docker-compose down || true'
-                    sh 'docker system prune -f || true'
-                } else {
-                    bat 'docker-compose down || echo "Cleanup failed"'
-                    bat 'docker system prune -f || echo "Prune failed"'
-                }
-            }
+            // Bersihkan workspace
+            cleanWs()
         }
     }
 }

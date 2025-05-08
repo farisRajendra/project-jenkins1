@@ -1,10 +1,6 @@
-# Gunakan image PHP + Apache untuk Windows
-FROM php:8.2-apache
+FROM php:8.2-fpm
 
-# Set working directory
-WORKDIR /var/www/html
-
-# Install dependencies untuk Laravel
+# Install dependensi
 RUN apt-get update && apt-get install -y \
     git \
     curl \
@@ -12,29 +8,36 @@ RUN apt-get update && apt-get install -y \
     libonig-dev \
     libxml2-dev \
     zip \
-    unzip
+    unzip \
+    nodejs \
+    npm
 
-# Install ekstensi PHP yang diperlukan
-RUN docker-php-ext-install pdo pdo_mysql mbstring exif pcntl bcmath gd
+# Clear cache
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install Composer
+# Install ekstensi PHP
+RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd
+
+# Pasang Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Copy semua file Laravel ke container
-COPY . .
+# Set directory kerja
+WORKDIR /var/www
 
-# Install dependencies Laravel
-RUN composer install --no-interaction --prefer-dist --optimize-autoloader
+# Salin aplikasi ke container
+COPY . /var/www
 
-# Generate Laravel key (jika .env belum ada)
-RUN if [ ! -f ".env" ]; then cp .env.example .env && php artisan key:generate; fi
+# Atur permission
+RUN chown -R www-data:www-data /var/www
+RUN chmod -R 755 /var/www/storage
 
-# Set permission storage
-RUN chown -R www-data:www-data /var/www/html/storage
-RUN chmod -R 775 /var/www/html/storage
+# Install dependensi PHP
+RUN composer install --no-interaction --no-dev --optimize-autoloader
 
-# Expose port 80
-EXPOSE 80
+# Install dependensi Node.js dan build assets
+RUN npm install && npm run build
 
-# Jalankan Apache
-CMD ["apache2-foreground"]
+# Ekspos port PHP-FPM
+EXPOSE 9000
+
+CMD ["php-fpm"]
