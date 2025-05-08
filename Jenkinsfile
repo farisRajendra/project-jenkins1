@@ -1,43 +1,53 @@
 pipeline {
-    agent {
-        docker {
-            image 'docker:dind'  // Docker-in-Docker untuk build Docker
-            args '-v /var/run/docker.sock:/var/run/docker.sock --privileged'
-            label 'master || built-in'  # Fallback ke node master jika label tidak ada
-        }
-    }
+    agent any  // Menggunakan agent apa saja yang tersedia
 
     environment {
         DOCKER_IMAGE = "laravel-app"
         DOCKER_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT.take(7)}"
+        // Untuk Windows, gunakan path absolut
+        WORKSPACE = "${env.WORKSPACE}".replace('/', '\\')
     }
 
     stages {
         stage('Checkout & Setup') {
             steps {
                 checkout scm
-                sh '''
-                    cp .env.example .env || true
-                    echo "APP_ENV=production" >> .env
-                '''
+                bat """
+                    @echo off
+                    if not exist .env (
+                        copy .env.example .env || echo File .env.example not found
+                        echo APP_ENV=production >> .env
+                    )
+                """
             }
         }
 
-        stage('Build Laravel') {
+        stage('Install Dependencies') {
             steps {
-                sh '''
-                    docker run --rm -v ${PWD}:/app composer install --no-interaction
-                    docker run --rm -v ${PWD}:/app node:16 npm install && npm run prod
-                '''
+                bat """
+                    docker run --rm -v "%WORKSPACE%":/app -w /app composer install --no-interaction
+                    docker run --rm -v "%WORKSPACE%":/app -w /app node:16 npm install
+                    docker run --rm -v "%WORKSPACE%":/app -w /app node:16 npm run prod || docker run --rm -v "%WORKSPACE%":/app -w /app node:16 npm run build
+                """
             }
         }
 
-        stage('Deploy') {
+        stage('Build & Deploy') {
             steps {
-                sh """
-                    docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
-                    docker-compose down || true
-                    docker-compose up -d
+                bat """
+                    docker build -t %DOCKER_IMAGE%:%DOCKER_TAG% .
+                    docker-compose down || echo "No containers to stop"
+                    docker-compose up -d --build
+                    timeout /t 10 /nobreak > NUL
+                """
+            }
+        }
+
+        stage('Verify') {
+            steps {
+                bat """
+                    docker-compose ps
+                    curl http://localhost:8000 || echo "Application not responding"
                 """
             }
         }
@@ -45,7 +55,10 @@ pipeline {
 
     post {
         always {
-            sh 'docker system prune -f || true'  # Bersihkan Docker
+            bat """
+                docker-compose down || echo "Cleanup failed"
+                docker system prune -f || echo "Prune failed"
+            """
         }
     }
 }
