@@ -3,10 +3,14 @@ version: '3.8'
 services:
   app:
     build: .
+    image: ${DOCKER_IMAGE:-laravel-app}:${DOCKER_TAG:-latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-laravel}_app
+    restart: unless-stopped
     ports:
       - "8000:80"  # Port host:Port container
     volumes:
       - .:/var/www/html  # Mount folder lokal ke container
     environment:
-      - APP_ENV=local
-      - APP_DEBUG=true
+      - APP_ENV=${APP_ENV:-local}
+      - APP_DEBUG=${APP_DEBUG:-true}
+      # Variabel lingkungan bisa ditambahkan sesuai kebutuhan
