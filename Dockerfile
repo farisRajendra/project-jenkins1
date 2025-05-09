@@ -1,6 +1,9 @@
 FROM php:8.2-fpm
 
-# Install dependensi
+# Argumen untuk non-interaktif apt
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Install dependencies
 RUN apt-get update && apt-get install -y \
     git \
     curl \
@@ -9,35 +12,26 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     zip \
     unzip \
-    nodejs \
     npm
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install ekstensi PHP
+# Install PHP extensions
 RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd
 
-# Pasang Composer
+# Get latest Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Set directory kerja
+# Set working directory
 WORKDIR /var/www
 
-# Salin aplikasi ke container
+# Copy existing application directory permissions
 COPY . /var/www
 
-# Atur permission
-RUN chown -R www-data:www-data /var/www
-RUN chmod -R 755 /var/www/storage
+# Change current user to www-data
+USER www-data
 
-# Install dependensi PHP
-RUN composer install --no-interaction --no-dev --optimize-autoloader
-
-# Install dependensi Node.js dan build assets
-RUN npm install && npm run build
-
-# Ekspos port PHP-FPM
+# Expose port 9000 and start php-fpm server
 EXPOSE 9000
-
 CMD ["php-fpm"]

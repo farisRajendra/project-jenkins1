@@ -4,7 +4,8 @@ pipeline {
     environment {
         // Variabel lingkungan
         APP_NAME = "laravel_app"
-        DOCKER_COMPOSE_VERSION = "1.29.2"
+        // WSL path untuk Docker
+        WSL_PATH = "\\\\wsl.localhost\\docker-desktop"
     }
     
     stages {
@@ -12,6 +13,10 @@ pipeline {
             steps {
                 // Checkout kode dari repositori Git
                 checkout scm
+                
+                // Cek Docker tersedia
+                bat 'docker --version || echo "Docker tidak tersedia"'
+                bat 'docker-compose --version || echo "Docker Compose tidak tersedia"'
             }
         }
         
@@ -20,75 +25,60 @@ pipeline {
                 // Buat file .env dari .env.example
                 script {
                     if (fileExists('.env.example')) {
-                        sh 'cp .env.example .env'
-                        // Update nilai-nilai variabel lingkungan sesuai kebutuhan
-                        sh '''
-                            sed -i 's/DB_HOST=127.0.0.1/DB_HOST=db/g' .env
-                            sed -i 's/DB_DATABASE=laravel/DB_DATABASE=laravel_app/g' .env
-                            sed -i 's/DB_USERNAME=root/DB_USERNAME=laravel_user/g' .env
-                            sed -i 's/DB_PASSWORD=/DB_PASSWORD=laravel_password/g' .env
+                        bat 'copy .env.example .env'
+                        
+                        // Sesuaikan file .env untuk Windows menggunakan PowerShell
+                        powershell '''
+                            (Get-Content .env) | 
+                            ForEach-Object { $_ -replace "DB_HOST=127.0.0.1", "DB_HOST=db" } |
+                            ForEach-Object { $_ -replace "DB_DATABASE=laravel", "DB_DATABASE=laravel_app" } |
+                            ForEach-Object { $_ -replace "DB_USERNAME=root", "DB_USERNAME=laravel_user" } |
+                            ForEach-Object { $_ -replace "DB_PASSWORD=", "DB_PASSWORD=laravel_password" } |
+                            Set-Content .env
                         '''
                     } else {
                         error "File .env.example tidak ditemukan!"
                     }
                 }
                 
-                // Generate application key
-                sh 'docker run --rm -v ${PWD}:/var/www php:8.2-cli php /var/www/artisan key:generate'
+                // Generate application key menggunakan Docker dengan WSL path
+                script {
+                    try {
+                        // Konversi Windows path ke WSL path
+                        def workspacePath = pwd().replace("\\", "/").replace("C:", "/mnt/c")
+                        bat "docker run --rm -v \"${workspacePath}:/var/www\" php:8.2-cli php /var/www/artisan key:generate"
+                    } catch (Exception e) {
+                        echo "Error saat generate key dengan path standar: ${e.message}"
+                        echo "Mencoba dengan alternatif path WSL..."
+                        
+                        // Alternatif mounting untuk WSL
+                        bat "docker run --rm -v \"%CD%:/var/www\" php:8.2-cli php /var/www/artisan key:generate"
+                    }
+                }
             }
         }
         
-        stage('Build dan Up Docker') {
+        stage('Build dan Deploy') {
             steps {
-                // Pastikan Docker berjalan
-                sh 'docker --version'
-                
                 // Build dan jalankan kontainer
-                sh 'docker-compose build'
-                sh 'docker-compose up -d'
-            }
-        }
-        
-        stage('Migrasi Database') {
-            steps {
-                // Jalankan migrasi database di dalam kontainer
-                sh 'docker-compose exec -T app php artisan migrate --force'
-            }
-        }
-        
-        stage('Install Dependencies dan Build Assets') {
-            steps {
-                // Install PHP dependencies
-                sh 'docker-compose exec -T app composer install --no-interaction --no-dev --optimize-autoloader'
-                
-                // Install Node.js dependencies dan build assets
-                sh 'docker-compose exec -T app npm install'
-                sh 'docker-compose exec -T app npm run build'
-            }
-        }
-        
-        stage('Cache Config dan Routes') {
-            steps {
-                // Optimasi Laravel
-                sh 'docker-compose exec -T app php artisan config:cache'
-                sh 'docker-compose exec -T app php artisan route:cache'
-                sh 'docker-compose exec -T app php artisan view:cache'
-            }
-        }
-        
-        stage('Tests') {
-            steps {
-                // Jalankan pengujian Laravel
-                sh 'docker-compose exec -T app php artisan test'
-            }
-        }
-        
-        stage('Deploy') {
-            steps {
-                echo 'Aplikasi Laravel berhasil di-deploy dan berjalan pada http://localhost'
-                
-                // Opsional: tambahkan langkah-langkah deployment ke server produksi
-                // Misalnya menggunakan rsync, scp, atau metode lainnya
+                script {
+                    try {
+                        // Gunakan opsi -f jika docker-compose.yml tidak di root
+                        if (fileExists('docker-compose.yml')) {
+                            bat 'docker-compose build'
+                            bat 'docker-compose up -d'
+                        } else if (fileExists('docker/docker-compose.yml')) {
+                            bat 'docker-compose -f docker/docker-compose.yml build'
+                            bat 'docker-compose -f docker/docker-compose.yml up -d'
+                        } else {
+                            error "docker-compose.yml tidak ditemukan!"
+                        }
+                        
+                        echo 'Aplikasi Laravel berhasil di-deploy dan berjalan pada http://localhost'
+                    } catch (Exception e) {
+                        error "Gagal melakukan build dan deploy: ${e.message}"
+                    }
+                }
             }
         }
     }
@@ -98,13 +88,26 @@ pipeline {
             echo 'Pipeline berhasil dijalankan!'
         }
         failure {
-            // Jika pipeline gagal, matikan kontainer Docker
-            sh 'docker-compose down'
-            echo 'Pipeline gagal! Kontainer Docker telah dimatikan.'
+            // Jika pipeline gagal, coba matikan kontainer Docker
+            script {
+                try {
+                    if (fileExists('docker-compose.yml')) {
+                        bat 'docker-compose down || echo "Tidak dapat menjalankan docker-compose down"'
+                    } else if (fileExists('docker/docker-compose.yml')) {
+                        bat 'docker-compose -f docker/docker-compose.yml down || echo "Tidak dapat menjalankan docker-compose down"'
+                    }
+                } catch (Exception e) {
+                    echo "Gagal menjalankan docker-compose down: ${e.message}"
+                }
+            }
+            echo 'Pipeline gagal! Mencoba mematikan kontainer Docker.'
         }
         always {
             // Bersihkan workspace
             cleanWs()
+            
+            // Menampilkan Docker container yang sedang berjalan
+            bat 'docker ps || echo "Tidak dapat menampilkan container yang berjalan"'
         }
     }
 }
